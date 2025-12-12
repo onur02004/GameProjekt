@@ -29,7 +29,7 @@ app.get("/playercontrols.html", (req,res) => {
 const server = http.createServer(app);
 //Starte socket.io mit eben dem HTTP-Server, den er braucht
 // normale Anfrage (Website) -> durchlassen zu Express(app)
-// WebSocket Anfrage (Handshake) -> io übernimmt
+// WebSocket Anfrage (WebSocket-Handshake) -> io übernimmt
 const io = new Server(server, {
   cors: {
     // Sicherheits-Schranke für Browser
@@ -40,9 +40,9 @@ const io = new Server(server, {
 
 // In-memory room storage
 // rooms = {
-//   "12345678": {
+//   "12345678": {                                  <- Key ist der Raumcode
 //      roomCode: "12345678",
-//      players: [ { id, name, character, ready } ]
+//      players: [ { id, name, character, ready } ] <- Liste Spieler im Raum
 //   }
 // }
 const rooms = {};
@@ -58,15 +58,23 @@ function generateRoomCode() {
 
 /* ---------------------- SOCKET.IO LOGIC ---------------------- */
 
+
+// Erkennt Connection
 io.on("connection", (socket) => {
+
   console.log("Client connected:", socket.id);
 
   socket.on("connect", () => {
     console.log("PlayerControls connected, id:", socket.id);
 });
 
+  // --- Lobby-Management ---
+
   // Unity (or anyone) asks to create a room
   // client: socket.emit("createRoom", (response) => { ... })
+
+  // Unity fragt Raum an, Server generiert Code und erstellt leere Spielerliste
+  // Schickt den generierten Code an Unity zurück
   socket.on("createRoom", (callback) => {
     console.log("creating room");
 
@@ -87,6 +95,10 @@ io.on("connection", (socket) => {
 
   // HTML or Unity joins a room
   // client: socket.emit("joinRoom", { roomCode, name, character }, (res) => { ... })
+
+  // Handy möchte in Raum ... Server prueft ob es Raum gibt, 
+  // Setzt Spieler auf die Liste
+  // Schreibt dem Raum und Unity, dass ein neuer Spieler da ist
   socket.on("joinRoom", (data, callback) => {
     const { roomCode, name, character } = data || {};
     const room = rooms[roomCode];
@@ -133,6 +145,9 @@ io.on("connection", (socket) => {
 
   // Player presses "I'm ready" button
   // client: socket.emit("setReady", { roomCode }, (res) => { ... })
+
+  // Spieler drueckt bereit, Server merkt sich das, prueft, ob alle bereit sind
+  // Wenn ja -> gameStart
   socket.on("setReady", (data, callback) => {
     const { roomCode } = data || {};
     const room = rooms[roomCode];
@@ -173,8 +188,13 @@ io.on("connection", (socket) => {
     }
   });
 
+  // --- Steuerung ---
+
   // Phone / browser control input → forward to Unity
   // client: socket.emit("playerControl", { roomCode, playerName, action, x, y });
+
+  // Leitet die Steuerung vom Handy einfach direkt an Unity weiter
+  // Quasi als Brücke
   socket.on("playerControl", (data) => {
     const { roomCode, playerName, action, x, y } = data || {};
 
@@ -202,7 +222,10 @@ io.on("connection", (socket) => {
     io.to(roomCode).emit("playerControl", payload);
   });
 
+  // --- Rückmeldung vom Spiel ans Handy ---
 
+  // Unity merkt z.B. Spieler steht vor einem Schalter
+  // -> Unity sagt Server Bescheid, Server sucht Handy und gibt den Button
   socket.on("playerControllableAreaTriggerEntered", (data) => {
     const { roomCode, playerName, action, description } = data || {};
 
@@ -230,6 +253,7 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Gegenteil, Spieler läuft weg, Button verschwindet
   socket.on("playerControllableAreaTriggerLeft", (data) => {
     const { roomCode, playerName, action } = data || {};
 
@@ -259,7 +283,7 @@ io.on("connection", (socket) => {
     }
   });
 
-
+  // Aufraumen (Spieler loeschen bei disconnect, Message senden)
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
 
