@@ -42,7 +42,7 @@ function generateRoomCode() {
 }
 
 /* ---------------------- SOCKET.IO LOGIC ---------------------- */
-
+// Handle socket.io connections
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
@@ -50,6 +50,7 @@ io.on("connection", (socket) => {
     console.log("PlayerControls connected, id:", socket.id);
 });
 
+  // Handle room creation
   // Unity (or anyone) asks to create a room
   // client: socket.emit("createRoom", (response) => { ... })
   socket.on("createRoom", (callback) => {
@@ -83,9 +84,16 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (!name || !character) {
+    if (!name) {
       if (typeof callback === "function") {
-        callback({ success: false, error: "Missing name or character" });
+        callback({ success: false, error: "Missing name" });
+      }
+      return;
+    }
+    
+    if (!character) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Missing character" });
       }
       return;
     }
