@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Join Room</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+
+        .container {
+            max-width: 400px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        #result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: #e8ffe8;
+            border: 1px solid #4caf50;
+        }
+
+        .error {
+            background-color: #ffe8e8;
+            border: 1px solid #f44336;
+        }
+
+        #players {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Join a Room</h1>
+
+        <label for="roomCode">Room Code (8 digits)</label>
+        <input type="text" id="roomCode" />
+
+        <label for="name">Your Name</label>
+        <input type="text" id="name" placeholder="Player1" />
+
+        <label for="character">Choose a Character</label>
+        <select id="character">
+            <option value="Warrior">Warrior</option>
+            <option value="Mage">Mage</option>
+            <option value="Archer">Archer</option>
+            <option value="Healer">Healer</option>
+        </select>
+
+        <button id="joinBtn">Join Room</button>
+        <button id="readyBtn">I'm Ready</button>
+
+        <div id="result"></div>
+        <div id="players"></div>
+    </div>
+
+    <!-- socket.io client from server -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const baseUrl = window.location.origin;
+
+        // Extract room code from URL path (/12345678)
+        const pathParts = window.location.pathname.split("/").filter(p => p.length > 0);
+        const roomCodeFromUrl = pathParts.length > 0 ? pathParts[0] : "";
+
+        const roomCodeInput = document.getElementById("roomCode");
+        const nameInput = document.getElementById("name");
+        const characterSelect = document.getElementById("character");
+        const resultDiv = document.getElementById("result");
+        const playersDiv = document.getElementById("players");
+        const joinBtn = document.getElementById("joinBtn");
+        const readyBtn = document.getElementById("readyBtn");
+
+        if (roomCodeFromUrl) {
+            roomCodeInput.value = roomCodeFromUrl;
+        }
+
+        // Connect to socket.io
+        const socket = io(baseUrl);
+
+        // When server sends roomUpdated, show players and ready status
+        socket.on("roomUpdated", (room) => {
+            if (!room || !room.players) {
+                playersDiv.textContent = "No players in room.";
+                return;
+            }
+
+            const readyCount = room.players.filter(p => p.ready).length;
+
+            let html = `<h3>Room ${room.roomCode}</h3>
+                        <p>${readyCount}/${room.players.length} players ready</p>
+                        <ul>`;
+
+            for (const p of room.players) {
+                const readyText = p.ready ? "✔ READY" : "… waiting";
+                const color = p.ready ? "green" : "gray";
+
+                html += `
+                    <li>
+                        <strong>${p.name}</strong> (${p.character})
+                        <span style="color:${color}; margin-left:8px;">${readyText}</span>
+                    </li>
+                `;
+            }
+            html += "</ul>";
+            playersDiv.innerHTML = html;
+        });
+
+        // Optional: react when server says the game starts
+        socket.on("gameStart", (data) => {
+            console.log("Game starting in room", data.roomCode);
+            resultDiv.textContent = "Game is starting!";
+            resultDiv.className = "success";
+
+            const roomCode = data.roomCode;
+            const name = nameInput.value.trim();
+            const character = characterSelect.value;
+
+            // Save for the next page
+            localStorage.setItem("roomCode", roomCode);
+            localStorage.setItem("playerName", name);
+            localStorage.setItem("character", character);
+
+            // Go to controls page
+            window.location.href = `/playercontrols.html?roomCode=${roomCode}`;
+        });
+
+
+        // Join room
+        joinBtn.addEventListener("click", () => {
+            const roomCode = roomCodeInput.value.trim();
+            const name = nameInput.value.trim();
+            const character = characterSelect.value;
+
+            resultDiv.textContent = "";
+            resultDiv.className = "";
+
+            if (!roomCode || !name) {
+                resultDiv.textContent = "Please enter room code and name.";
+                resultDiv.className = "error";
+                return;
+            }
+
+            // Ask server to joinRoom via socket.io
+            socket.emit(
+                "joinRoom",
+                { roomCode, name, character },
+                (response) => {
+                    if (!response || !response.success) {
+                        resultDiv.textContent = (response && response.error) || "Failed to join room.";
+                        resultDiv.className = "error";
+                    } else {
+                        resultDiv.textContent =
+                            `Joined room ${response.roomCode} as ${response.player.name} (${response.player.character}).`;
+                        resultDiv.className = "success";
+                    }
+                }
+            );
+        });
+
+        // Ready button
+        readyBtn.addEventListener("click", () => {
+            const roomCode = roomCodeInput.value.trim();
+            if (!roomCode) {
+                alert("No room code set.");
+                return;
+            }
+
+            socket.emit("setReady", { roomCode }, (response) => {
+                if (!response || !response.success) {
+                    console.log("setReady error:", response && response.error);
+                    return;
+                }
+                console.log("You are marked as ready.");
+
+                // Disable the button after ready
+                readyBtn.disabled = true;
+                readyBtn.innerText = "Ready ✔";
+                readyBtn.style.background = "#4caf50";
+                readyBtn.style.color = "white";
+            });
+        });
+    </script>
+</body>
+
+</html>

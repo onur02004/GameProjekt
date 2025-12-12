@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Player Controls</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #111;
+            color: #fff;
+        }
+
+        #orientationOverlay {
+            position: fixed;
+            inset: 0;
+            background: #000c;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        #orientationOverlay h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        #orientationOverlay p {
+            font-size: 16px;
+            opacity: 0.8;
+        }
+
+        #infoBar {
+            position: fixed;
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            opacity: 0.8;
+            z-index: 500;
+        }
+
+        #controlsRoot {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+        }
+
+        /* LEFT SIDE: JOYSTICK */
+        #joystickArea {
+            flex: 0 0 40%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #joystickBase {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #444 0%, #222 60%, #111 100%);
+            border: 2px solid #666;
+            touch-action: none;
+        }
+
+        #joystickHandle {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #00bcd4 0%, #0097a7 60%, #006064 100%);
+            border: 2px solid #00e5ff;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* RIGHT SIDE: EXAMPLE ACTION BUTTONS (you can change later) */
+        #actionArea {
+            flex: 0 0 40%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background: #444;
+            cursor: pointer;
+            margin: 0 8px;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+            background: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="orientationOverlay">
+        <div>
+            <h2>Please rotate your phone</h2>
+            <p>This control screen only works in landscape mode.</p>
+        </div>
+    </div>
+
+    <div id="infoBar">
+        <span id="playerInfo"></span>
+        <span id="roomInfo"></span>
+    </div>
+
+    <div id="controlsRoot">
+        <!-- LEFT: JOYSTICK -->
+        <div id="joystickArea">
+            <div id="joystickBase">
+                <div id="joystickHandle"></div>
+            </div>
+        </div>
+
+        <!-- RIGHT: ACTION BUTTONS (example) -->
+        <div id="actionArea">
+            <button class="btn" id="actionBtn" style="visibility: hidden;">Action</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const baseUrl = window.location.origin;
+
+        // Read from query + localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomCodeFromQuery = urlParams.get("roomCode");
+        const roomCode = roomCodeFromQuery || localStorage.getItem("roomCode") || "";
+        const playerName = localStorage.getItem("playerName") || "Unknown";
+        const character = localStorage.getItem("character") || "Unknown";
+
+        const playerInfoSpan = document.getElementById("playerInfo");
+        const roomInfoSpan = document.getElementById("roomInfo");
+        const overlay = document.getElementById("orientationOverlay");
+        const controlsRoot = document.getElementById("controlsRoot");
+
+        playerInfoSpan.textContent = `Player: ${playerName}`;
+        roomInfoSpan.textContent = `Room: ${roomCode || "?"}`;
+
+        // Orientation check: only landscape allowed
+        function checkOrientation() {
+            const isLandscape = window.innerWidth > window.innerHeight;
+
+            if (!isLandscape) {
+                overlay.style.display = "flex";
+                controlsRoot.style.pointerEvents = "none";
+                controlsRoot.style.opacity = "0.2";
+            } else {
+                overlay.style.display = "none";
+                controlsRoot.style.pointerEvents = "auto";
+                controlsRoot.style.opacity = "1";
+            }
+        }
+
+        window.addEventListener("resize", checkOrientation);
+        window.addEventListener("orientationchange", checkOrientation);
+        document.addEventListener("DOMContentLoaded", checkOrientation);
+
+        // Connect socket
+        const socket = io(baseUrl);
+
+        socket.on("connect", () => {
+            console.log("PlayerControls connected, id:", socket.id);
+
+            if (roomCode && playerName) {
+            console.log("Re-joining room as " + playerName);
+            socket.emit("joinRoom", { 
+                roomCode, 
+                name: playerName, 
+                character: character 
+            }, (response) => {
+                if (response && response.success) {
+                    console.log("Successfully rejoined room context.");
+                } else {
+                    console.error("Failed to rejoin room:", response?.error);
+                }
+            });
+        }
+        });
+
+        socket.on("disconnect", () => {
+            console.log("PlayerControls disconnected");
+        });
+
+        socket.on("playerControllableAreaTriggerEntered", (data) => {
+            // Safety check in case data is null
+            const { roomCode, playerName, action, description } = data || {};
+
+            console.log("User entered a trigger area for action: " + action);
+            document.getElementById('actionBtn').style.visibility = "visible";
+        });
+
+        socket.on("playerControllableAreaTriggerLeft", (data) => {
+            const { roomCode, playerName, action} = data || {};
+
+            console.log("User LEFT a trigger area for action");
+            document.getElementById('actionBtn').style.visibility = "hidden";
+        });
+
+        // ---- JOYSTICK LOGIC ----
+        const base = document.getElementById("joystickBase");
+        const handle = document.getElementById("joystickHandle");
+
+        let isDragging = false;
+        let centerX = 0;
+        let centerY = 0;
+        const maxRadius = 80; // max distance handle can move from center
+
+        function getBaseCenter() {
+            const rect = base.getBoundingClientRect();
+            centerX = rect.left + rect.width / 2;
+            centerY = rect.top + rect.height / 2;
+        }
+
+        function sendMove(dx, dy) {
+            if (!roomCode) return;
+
+            // Normalize to -1..1
+            const magnitude = Math.sqrt(dx * dx + dy * dy);
+            let nx = 0;
+            let ny = 0;
+            if (magnitude > 0) {
+                nx = dx / maxRadius;
+                ny = dy / maxRadius;
+                // clamp
+                nx = Math.max(-1, Math.min(1, nx));
+                ny = Math.max(-1, Math.min(1, ny));
+            }
+
+            // Invert Y so up is positive if you want:
+            ny = -ny;
+            socket.emit("playerControl", {
+                roomCode,
+                playerName,
+                action: "move",
+                x: nx,
+                y: ny
+            });
+        }
+
+        function updateHandle(clientX, clientY) {
+            const dx = clientX - centerX;
+            const dy = clientY - centerY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            let clampedDx = dx;
+            let clampedDy = dy;
+
+            if (dist > maxRadius) {
+                const ratio = maxRadius / dist;
+                clampedDx = dx * ratio;
+                clampedDy = dy * ratio;
+            }
+
+            handle.style.transform =
+                `translate(calc(-50% + ${clampedDx}px), calc(-50% + ${clampedDy}px))`;
+
+            sendMove(clampedDx, clampedDy);
+        }
+
+        function resetHandle() {
+            handle.style.transform = "translate(-50%, -50%)";
+            sendMove(0, 0);
+        }
+
+        function onPointerDown(e) {
+            e.preventDefault();
+            getBaseCenter();
+            isDragging = true;
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            updateHandle(clientX, clientY);
+        }
+
+        function onPointerMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            updateHandle(clientX, clientY);
+        }
+
+        function onPointerUp(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            isDragging = false;
+            resetHandle();
+        }
+
+        // Mouse events
+        base.addEventListener("mousedown", onPointerDown);
+        window.addEventListener("mousemove", onPointerMove);
+        window.addEventListener("mouseup", onPointerUp);
+
+        // Touch events
+        base.addEventListener("touchstart", onPointerDown, { passive: false });
+        window.addEventListener("touchmove", onPointerMove, { passive: false });
+        window.addEventListener("touchend", onPointerUp, { passive: false });
+        window.addEventListener("touchcancel", onPointerUp, { passive: false });
+
+        //schau spaeter
+        //const jumpBtn = document.getElementById("jumpBtn");
+        //jumpBtn.addEventListener("click", () => {
+        //    if (!roomCode) return;
+        //    console.log("JUMP pressed");
+        //    socket.emit("playerControl", {
+        //        roomCode,
+        //        playerName,
+        //        action: "jump"
+        //    });
+        //});
+    </script>
+</body>
+
+</html>
