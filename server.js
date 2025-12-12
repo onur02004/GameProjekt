@@ -72,31 +72,55 @@ io.on("connection", (socket) => {
 
   // HTML or Unity joins a room
   // client: socket.emit("joinRoom", { roomCode, name, character }, (res) => { ... })
-  socket.on("joinRoom", (data, callback) => {
+socket.on("joinRoom", (data, callback) => {
     const { roomCode, name, character } = data || {};
     const room = rooms[roomCode];
 
     if (!room) {
-      if (typeof callback === "function") {
-        callback({ success: false, error: "Room not found" });
-      }
+      if (typeof callback === "function") callback({ success: false, error: "Room not found" });
       return;
     }
 
-    if (!name || !character) {
-      if (typeof callback === "function") {
-        callback({ success: false, error: "Missing name or character" });
-      }
-      return;
+    // FIX: Prüfen, ob der Name schon existiert (Reconnect-Logik)
+    const existingPlayer = room.players.find((p) => p.name === name);
+
+    if (existingPlayer) {
+        // Fall: Reconnect!
+        // Wir aktualisieren nur die "Telefonnummer" (Socket ID) des Spielers
+        existingPlayer.id = socket.id;
+        
+        // Character updaten, falls er gewechselt wurde
+        existingPlayer.character = character; 
+        
+        // Wir setzen ihn wieder auf "nicht bereit" oder lassen es so, wie du magst
+        // existingPlayer.ready = false; 
+
+        socket.join(roomCode);
+        console.log(`Player ${name} reconnected via socket ${socket.id}`);
+        
+        // Alle informieren
+        io.to(roomCode).emit("roomUpdated", room);
+
+        if (typeof callback === "function") {
+            callback({
+                success: true,
+                roomCode,
+                player: existingPlayer,
+                playerCount: room.players.length,
+            });
+        }
+        return; // WICHTIG: Hier aufhören, damit er nicht doppelt hinzugefügt wird
     }
 
-    // track this player by socket.id and ready state
+    // --- Ab hier der normale Code für NEUE Spieler ---
     const player = {
       id: socket.id,
       name,
       character,
       ready: false,
     };
+    
+    // ... Rest bleibt gleich (room.players.push, etc.)
 
     room.players.push(player);
 
@@ -158,27 +182,31 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Phone / browser control input → forward to Unity
-  // client: socket.emit("playerControl", { roomCode, playerName, action, x, y });
-  socket.on("playerControl", (data) => {
-    const { roomCode, playerName, action, x, y } = data || {};
+  // Methode geaendert
 
-    if (!roomCode) {
-      console.log("playerControl without roomCode, ignoring");
-      return;
-    }
+  // Phone / browser control input → forward to Unity
+  socket.on("playerControl", (data) => {
+    // Wir nehmen nur die Bewegungsdaten, den Namen ignorieren wir erstmal aus den Daten
+    const { roomCode, action, x, y } = data || {};
+
+    if (!roomCode) return;
 
     const room = rooms[roomCode];
-    if (!room) {
-      console.log(`playerControl: room ${roomCode} not found`);
+    if (!room) return;
+
+    // FIX: Wir suchen den Spieler anhand seiner ECHTEN Verbindung (Socket ID)
+    // Damit verhindern wir, dass jemand fremdes Befehle für "Hans" schickt.
+    const player = room.players.find((p) => p.id === socket.id);
+
+    if (!player) {
+      console.log("Befehl ignoriert: Sender ist nicht im Raum.");
       return;
     }
 
-    //Konnte ein Problem sein wenn der PLayer disconnectes and reconnects
-
+    // Wir nehmen den verifizierten Namen aus unserer Liste
     const payload = {
       roomCode,
-      playerName,
+      playerName: player.name, // <-- Hier nutzen wir den echten Namen
       action,
       x,
       y
