@@ -89,6 +89,8 @@ socket.on("joinRoom", (data, callback) => {
       }
       return;
     // FIX: Prüfen, ob der Name schon existiert (Reconnect-Logik)
+    }
+
     const existingPlayer = room.players.find((p) => p.name === name);
 
     if (existingPlayer) {
@@ -96,14 +98,12 @@ socket.on("joinRoom", (data, callback) => {
         // Wir aktualisieren nur die "Telefonnummer" (Socket ID) des Spielers
         existingPlayer.id = socket.id;
         
-        // Character updaten, falls er gewechselt wurde
-        existingPlayer.character = character; 
-        
         // Wir setzen ihn wieder auf "nicht bereit" oder lassen es so, wie du magst
         // existingPlayer.ready = false; 
 
         socket.join(roomCode);
         console.log(`Player ${name} reconnected via socket ${socket.id}`);
+        socket.emit("availableCharacters", room.availableCharacters);
         
         // Alle informieren
         io.to(roomCode).emit("roomUpdated", room);
@@ -142,6 +142,9 @@ socket.on("joinRoom", (data, callback) => {
     // Notify everyone in this room (including Unity) about new state
     io.to(roomCode).emit("roomUpdated", room);
 
+    io.to(roomCode).emit("availableCharacters", room.availableCharacters);
+
+
     if (typeof callback === "function") {
       callback({
         success: true,
@@ -151,7 +154,8 @@ socket.on("joinRoom", (data, callback) => {
       });
     }
   });
-
+  
+  
   // Handle Character selection
   // client: socket.emit("selectCharacter", { roomCode, name, character }, (res) => { ... })
   socket.on("selectCharacter", (data, callback) => {
@@ -185,6 +189,8 @@ socket.on("joinRoom", (data, callback) => {
 
     // Notify everyone that room state changed
     io.to(roomCode).emit("roomUpdated", room);
+    io.to(roomCode).emit("availableCharacters", room.availableCharacters);
+
 
     if (typeof callback === "function") {
       callback({ success: true });
