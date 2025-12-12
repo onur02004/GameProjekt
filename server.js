@@ -1,24 +1,39 @@
 // server.js
+// Vermittelt die Dateien an den Client (Handy)
 const express = require("express");
+// Cross-Origin Ressource Sharing (Smartphone <-> PC)
 const cors = require("cors");
+// Für die Übersetzung der Pfade (Linux "/", Windoof "\")
 const path = require("path");
+// Express (Websiten) && Socket.io (Echtzeit) -> gleichzeitig auf selben Port
 const http = require("http");
+// Klasse für Echtzeit-Kommunikation
 const { Server } = require("socket.io");
-
+// Erstellt Anwendung
 const app = express();
 const PORT = 6769;
 
 app.use(cors());
-app.use(express.json());
-
-app.get("/playercontrols.html", (req, res) => {
+app.use(express.json()); // Konvertiert Json-Text in JS-Objekte
+// (Anfrage (Wird nd gebraucht, aber von express gefordert), Antwort)
+app.get("/playercontrols.html", (req,res) => {
+  /* Schickt playercontrols vom Server-Speicher zum Handy
+     __dirname -> Startpunkt/public/Datei 
+     / oder \ macht er automatisch mit const path */
   res.sendFile(path.join(__dirname, "public", "playercontrols.html"));
 });
 
 // Create HTTP server and bind socket.io to it
+// Nimmt die Express-App und packt sie in einen NodeJS HTTP-server
+// socket.io braucht einen Server
 const server = http.createServer(app);
+//Starte socket.io mit eben dem HTTP-Server, den er braucht
+// normale Anfrage (Website) -> durchlassen zu Express(app)
+// WebSocket Anfrage (Handshake) -> io übernimmt
 const io = new Server(server, {
   cors: {
+    // Sicherheits-Schranke für Browser
+    // "*" heißt hier einfach "fuer alle"
     origin: "*",
   },
 });
