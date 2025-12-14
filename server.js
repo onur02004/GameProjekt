@@ -367,6 +367,16 @@ socket.on("joinRoom", (data, callback) => {
 
 /* ---------------------- HTTP ROUTES ---------------------- */
 
+// Test route
+app.get("/test", (req, res) => {
+  res.send("Server is running");
+});
+
+// Test join page
+app.get("/join", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "join.html"));
+});
+
 // Serve /rooms/:roomCode as JSON (optional, for debugging)
 app.get("/rooms/:roomCode", (req, res) => {
   const { roomCode } = req.params;
