@@ -1,20 +1,22 @@
 // testClient.js
 const { io } = require("socket.io-client");
+const readline = require("readline");
 
 // Verbindung zu deinem Server
 const socket = io("http://localhost:6769");
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
 // ===== CONNECT =====
 socket.on("connect", () => {
   console.log("✅ Connected to server");
   console.log("Socket ID:", socket.id);
 
-  // 1. Raum erstellen
-  socket.emit("createRoom", (res) => {
-    console.log("🏠 Room created:", res.roomCode);
-
-    const roomCode = res.roomCode;
-
+  rl.question("Enter room code to join: ", (roomCode) => {
+    
     // 2. Raum beitreten
     socket.emit(
       "joinRoom",
