@@ -91,6 +91,15 @@ function setReady(roomCode, socketId) {
   return { success: true, allReady, room };
 }
 
+function cansleReady(roomCode, socketId) {
+    const room = getRoom(roomCode);
+    if (!room) return { success: false, error: "Room not found" };
+    const player = room.players.find(p => p.id === socketId);
+    if (!player) return { success: false, error: "Player not in room" };
+    player.ready = false;
+    return { success: true, room };
+}
+
 function startGame(roomCode) {
   const room = getRoom(roomCode);
   if (!room) return { success: false, error: "Room not found" };
@@ -108,7 +117,8 @@ function removePlayerBySocketId(socketId) {
     const room = rooms[roomCode];
     const idx = room.players.findIndex(p => p.id === socketId);
     if (idx !== -1) {
-      const [player] = room.players.splice(idx, 1);
+        room.availableCharacters.push(room.players[idx].character);
+      const [player] = room.players.splice(idx, 1); // Remove player from room
       removed.push({ roomCode, player, room });
     }
   }
@@ -126,6 +136,7 @@ module.exports = {
   findPlayerByName,
   selectCharacter,
   setReady,
+  cansleReady,
   removePlayerBySocketId,
   startGame,
   changeCharacter,

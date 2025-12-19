@@ -34,6 +34,39 @@ socket.on("connect", () => {
           (charRes) => {
             console.log("🎭 Character select:", charRes);
 
+          // 3.2 Charakter wechseln
+            socket.emit(
+              "changeCharacter",
+              {
+                roomCode,
+                character: "Character 1", // test ob fehler meldung kommt
+              },
+              (changeRes) => {
+                console.log("🔄 Character change:", changeRes);
+              }
+            );
+
+            // 3.3 Charakter wechseln zurück
+            socket.emit(
+              "changeCharacter",
+              {
+                roomCode,
+                character: "Character 3",
+              },
+              (changeRes) => {
+                console.log("🔄 Character change back:", changeRes);
+              }
+            );
+
+            // start Test
+            socket.emit(
+              "startGame",
+              { roomCode },
+              (startRes) => {
+                console.log("🚀 Game start:", startRes);
+              }
+            );
+
             // 4. Ready setzen
             socket.emit(
               "setReady",
@@ -49,6 +82,7 @@ socket.on("connect", () => {
   });
 });
 
+
 // ===== SERVER EVENTS =====
 socket.on("roomUpdated", (room) => {
   console.log("📦 roomUpdated:", JSON.stringify(room, null, 2));
@@ -56,6 +90,10 @@ socket.on("roomUpdated", (room) => {
 
 socket.on("availableCharacters", (chars) => {
   console.log("🎮 Available characters:", chars);
+});
+
+socket.on("allReady", (room) => {
+  console.log("✅ All players ready in room:", room.roomCode);
 });
 
 socket.on("gameStart", (room) => {

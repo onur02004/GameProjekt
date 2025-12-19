@@ -1,0 +1,76 @@
+Client -> Server events
+- createRoom(callback)
+  payload: none
+  callback: { roomCode: string }
+
+- joinRoom({ roomCode: string, name: string }, callback)
+  callback success: { success: true, roomCode, player, playerCount }
+  errors: { success: false, error: "Room not found" | "Missing name" | "Name already taken" | ... }
+
+- selectCharacter({ roomCode: string, character: string }, callback)
+  callback success: { success: true }
+  errors: { success: false, error: "Room not found" | "Player not in room" | "Character not available" }
+
+- setReady({ roomCode: string }, callback)
+  callback success: { success: true }
+  server emits "allReady" when everyone ready
+  errors: { success: false, error: "Room not found" | "Player not in room" | "Player has not selected a character" }
+
+- cansleReady({ roomCode: string }, callback)
+  callback success: { success: true }
+  errors: similar to setReady
+
+- startGame({ roomCode: string }, callback)
+  callback success: { success: true }
+  server emits "gameStart" on success
+  errors: { success: false, error: "Not all players are ready" | "Room not found" }
+
+- playerControl({ roomCode: string, action: string, x?: number, y?: number })
+  forwarded to room as "playerControl" with payload { roomCode, playerName, action, x, y }
+
+- playerControllableAreaTriggerEntered({ roomCode, playerName, action, description })
+  server finds target player by name and emits "playerControllableAreaTriggerEntered" to that client's socket
+
+- playerControllableAreaTriggerLeft({ roomCode, playerName, action })
+  server finds target player by name and emits "playerControllableAreaTriggerLeft" to that client
+
+- disconnect
+  handled by server; removes player from rooms and emits updated room state
+
+Server -> Client events
+- availableCharacters: Array<string>
+  emitted after joinRoom, selectCharacter, etc.
+
+- roomUpdated: roomObject
+  emitted whenever room state changes (join, leave, character select, ready, ...)
+
+- allReady: roomObject
+  emitted when all players marked ready (setReady path)
+
+- gameStart: roomObject
+  emitted when game actually starts (startGame)
+
+- playerControl: { roomCode, playerName, action, x?, y? }
+  broadcasted player controls within room
+
+- playerControllableAreaTriggerEntered: { roomCode, playerName, action, description }
+  sent to target player only
+
+- playerControllableAreaTriggerLeft: { roomCode, playerName, action }
+  sent to target player only
+
+- cansleReady: roomObject
+  emitted when a cancel-ready action happens (keeps compatibility with current naming)
+
+Common error messages (sent in callback on failures)
+- "Room not found"
+- "Missing name"
+- "Name already taken"
+- "Character not available"
+- "Player not in room"
+- "Player has not selected a character"
+- "Not all players are ready"
+
+Notes
+- Callbacks are used for direct responses; many state changes are also pushed via roomUpdated / availableCharacters so clients should listen to those.
+- Event names must match exactly (including "cansleReady" typo if still used).

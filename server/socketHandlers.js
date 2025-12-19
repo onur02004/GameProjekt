@@ -66,8 +66,30 @@ module.exports = function registerSocketHandlers(io, roomsModule) {
       }
       io.to(roomCode).emit("roomUpdated", result.room);
       if (result.allReady) {
-        io.to(roomCode).emit("gameStart", result.room);
+        io.to(roomCode).emit("allReady", result.room);
       }
+      if (typeof callback === "function") callback({ success: true });
+    });
+    socket.on("cansleReady", (data, callback) => {
+        const { roomCode } = data || {};
+        const result = roomsModule.cansleReady(roomCode, socket.id);
+        if (!result.success) {
+          if (typeof callback === "function") callback(result);
+          return;
+        }
+        io.to(roomCode).emit("roomUpdated", result.room);
+        io.to(roomCode).emit("cansleReady", result.room);
+        if (typeof callback === "function") callback({ success: true });
+      });
+
+    socket.on("startGame", (data, callback) => {
+      const { roomCode } = data || {};
+      const result = roomsModule.startGame(roomCode);
+      if (!result.success) {
+        if (typeof callback === "function") callback(result);
+        return;
+      }
+      io.to(roomCode).emit("gameStart", result.room);
       if (typeof callback === "function") callback({ success: true });
     });
 
@@ -126,11 +148,44 @@ module.exports = function registerSocketHandlers(io, roomsModule) {
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
+      
       const removed = roomsModule.removePlayerBySocketId(socket.id);
       removed.forEach(r => {
         io.to(r.room.roomCode).emit("roomUpdated", r.room);
         console.log(`Removed player ${r.player.name} from room ${r.roomCode} due to disconnect`);
+        console.log("Updated room:", r.room);
       });
+    // Client verlässt Raum freiwillig
+    socket.on("leaveRoom", (data, callback) => {
+      const { roomCode } = data || {};
+      if (!roomCode) {
+        if (typeof callback === "function") callback({ success: false, error: "Missing roomCode" });
+        return;
+      }
+      const removed = roomsModule.removePlayerBySocketId(socket.id);
+      // entferne nur aus dem angegebenen Raum (removePlayerBySocketId liefert alle betroffenen Räume)
+      const r = removed.find(x => x.roomCode === roomCode);
+      if (!r) {
+        if (typeof callback === "function") callback({ success: false, error: "Player not in room" });
+        return;
+      }
+      socket.leave(roomCode);
+      io.to(roomCode).emit("roomUpdated", r.room);
+      if (typeof callback === "function") callback({ success: true });
+    });
+
+    // Charakter wechseln (nutzt rooms.changeCharacter)
+    socket.on("changeCharacter", (data, callback) => {
+      const { roomCode, newCharacter, oldCharacter } = data || {};
+      const result = roomsModule.changeCharacter(roomCode, socket.id, newCharacter, oldCharacter);
+      if (!result.success) {
+        if (typeof callback === "function") callback(result);
+        return;
+      }
+      io.to(roomCode).emit("roomUpdated", result.room);
+      io.to(roomCode).emit("availableCharacters", result.room.availableCharacters);
+      if (typeof callback === "function") callback({ success: true });
+    });
     });
   });
 };
