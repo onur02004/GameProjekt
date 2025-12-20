@@ -61,12 +61,19 @@
         <input type="text" id="name" placeholder="Player1" />
 
         <label for="character">Choose a Character</label>
-        <select id="character">
+        <div style="display: flex; gap: 10px;">
+            <button>Character 1</button>
+            <button>Character 2</button>
+            <button>Character 3</button>
+            <button>Character 4</button>
+        </div>
+
+        <!-- <select id="character">
             <option value="Warrior">Warrior</option>
             <option value="Mage">Mage</option>
             <option value="Archer">Archer</option>
             <option value="Healer">Healer</option>
-        </select>
+        </select> -->
 
         <button id="joinBtn">Join Room</button>
         <button id="readyBtn">I'm Ready</button>
@@ -165,7 +172,7 @@
             // Ask server to joinRoom via socket.io
             socket.emit(
                 "joinRoom",
-                { roomCode, name, character },
+                { roomCode, name},
                 (response) => {
                     if (!response || !response.success) {
                         resultDiv.textContent = (response && response.error) || "Failed to join room.";
@@ -179,6 +186,15 @@
             );
         });
 
+        // Select character
+        socket.emit("selectCharacter", { roomCode: roomCodeInput.value.trim(), character: characterSelect.value }, (response) => {
+            if (!response || !response.success) {
+                console.log("selectCharacter error:", response && response.error);
+            } else {
+                console.log("Character selected:", characterSelect.value);
+            }
+        });
+
         // Ready button
         readyBtn.addEventListener("click", () => {
             const roomCode = roomCodeInput.value.trim();
@@ -186,6 +202,8 @@
                 alert("No room code set.");
                 return;
             }
+
+        
 
             socket.emit("setReady", { roomCode }, (response) => {
                 if (!response || !response.success) {

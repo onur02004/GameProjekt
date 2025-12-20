@@ -57,7 +57,7 @@ function generateRoomCode() {
 }
 
 /* ---------------------- SOCKET.IO LOGIC ---------------------- */
-
+// Handle socket.io connections
 
 // Erkennt Connection
 io.on("connection", (socket) => {
@@ -70,6 +70,7 @@ io.on("connection", (socket) => {
 
   // --- Lobby-Management ---
 
+  // Handle room creation
   // Unity (or anyone) asks to create a room
   // client: socket.emit("createRoom", (response) => { ... })
 
@@ -82,6 +83,7 @@ io.on("connection", (socket) => {
     const room = {
       roomCode,
       players: [],
+      availableCharacters: ["Character 1", "Character 2", "Character 3", "Character 4"],
     };
     rooms[roomCode] = room;
 
@@ -96,7 +98,7 @@ io.on("connection", (socket) => {
   // HTML or Unity joins a room
   // client: socket.emit("joinRoom", { roomCode, name, character }, (res) => { ... })
 socket.on("joinRoom", (data, callback) => {
-    const { roomCode, name, character } = data || {};
+    const { roomCode, name} = data || {}; // character muss in join.htm entfernt werden
     const room = rooms[roomCode];
 
     if (!room) {
@@ -104,7 +106,14 @@ socket.on("joinRoom", (data, callback) => {
       return;
     }
 
+    if (!name) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Missing name" });
+      }
+      return;
     // FIX: Prüfen, ob der Name schon existiert (Reconnect-Logik)
+    }
+
     const existingPlayer = room.players.find((p) => p.name === name);
 
     if (existingPlayer) {
@@ -112,14 +121,12 @@ socket.on("joinRoom", (data, callback) => {
         // Wir aktualisieren nur die "Telefonnummer" (Socket ID) des Spielers
         existingPlayer.id = socket.id;
         
-        // Character updaten, falls er gewechselt wurde
-        existingPlayer.character = character; 
-        
         // Wir setzen ihn wieder auf "nicht bereit" oder lassen es so, wie du magst
         // existingPlayer.ready = false; 
 
         socket.join(roomCode);
         console.log(`Player ${name} reconnected via socket ${socket.id}`);
+        socket.emit("availableCharacters", room.availableCharacters);
         
         // Alle informieren
         io.to(roomCode).emit("roomUpdated", room);
@@ -134,12 +141,17 @@ socket.on("joinRoom", (data, callback) => {
         }
         return; // WICHTIG: Hier aufhören, damit er nicht doppelt hinzugefügt wird
     }
+    
+    /*if (!character) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Missing character" });
+      }*/
 
     // --- Ab hier der normale Code für NEUE Spieler ---
     const player = {
       id: socket.id,
       name,
-      character,
+      character: null, // wird in selectCharacter gesetzt
       ready: false,
     };
     
@@ -153,6 +165,9 @@ socket.on("joinRoom", (data, callback) => {
     // Notify everyone in this room (including Unity) about new state
     io.to(roomCode).emit("roomUpdated", room);
 
+    io.to(roomCode).emit("availableCharacters", room.availableCharacters);
+
+
     if (typeof callback === "function") {
       callback({
         success: true,
@@ -161,6 +176,48 @@ socket.on("joinRoom", (data, callback) => {
         playerCount: room.players.length,
       });
     }
+  });
+  
+  
+  // Handle Character selection
+  // client: socket.emit("selectCharacter", { roomCode, name, character }, (res) => { ... })
+  socket.on("selectCharacter", (data, callback) => {
+    const { roomCode,name, character } = data || {};
+    const room = rooms[roomCode];
+    if (!room) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Room not found" });
+      }
+      return;
+    }
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Player not in room" });
+      }
+      return;
+    }
+    if (!character || !room.availableCharacters.includes(character)) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Character not available" });
+      }
+      return;
+    }
+
+    // Assign character to player and remove from available list
+    player.character = character;
+    room.availableCharacters = room.availableCharacters.filter((c) => c !== character);
+
+    console.log(`Player ${player.name} selected character ${character} in room ${roomCode}`);
+
+    // Notify everyone that room state changed
+    io.to(roomCode).emit("roomUpdated", room);
+    io.to(roomCode).emit("availableCharacters", room.availableCharacters);
+
+
+    if (typeof callback === "function") {
+      callback({ success: true });
+    } 
   });
 
   // Player presses "I'm ready" button
@@ -187,6 +244,15 @@ socket.on("joinRoom", (data, callback) => {
       }
       return;
     }
+
+    if (!player.character) {
+      if (typeof callback === "function") {
+        callback({ success: false, error: "Player has not selected a character" });
+      }
+      return;
+    }
+
+    // mark player as ready
 
     player.ready = true;
     console.log(`Player ${player.name} is READY in room ${roomCode}`);
@@ -330,6 +396,16 @@ socket.on("joinRoom", (data, callback) => {
 });
 
 /* ---------------------- HTTP ROUTES ---------------------- */
+
+// Test route
+app.get("/test", (req, res) => {
+  res.send("Server is running");
+});
+
+// Test join page
+app.get("/join", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "join.html"));
+});
 
 // Serve /rooms/:roomCode as JSON (optional, for debugging)
 app.get("/rooms/:roomCode", (req, res) => {
